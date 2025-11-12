@@ -9,10 +9,9 @@ if (!API_KEY) {
   console.error('VITE_STOCKHOLM_API_KEY is not set. Please create a .env.local file with your API key.');
 }
 
-// Use proxy in development, direct URL in production
-const BASE_URL = import.meta.env.DEV 
-  ? '/api' 
-  : 'https://openparking.stockholm.se/LTF-Tolken/v1/servicedagar';
+// Always use proxy to avoid CORS issues in production
+// The proxy is handled by Vite dev server in development and Vercel serverless function in production
+const BASE_URL = '/api';
 
 export interface StreetSegment {
   id: string;
@@ -57,8 +56,8 @@ export async function fetchStreetData(): Promise<StreetSegment[]> {
   }
 
   try {
-    // Fetch from API
-    const url = `${BASE_URL}/all?apiKey=${API_KEY}&outputFormat=json`;
+    // Fetch from API via proxy (API key is handled server-side)
+    const url = `${BASE_URL}/all?outputFormat=json`;
     console.log('Fetching street data from API...');
     
     const response = await fetch(url);
