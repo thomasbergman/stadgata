@@ -7,26 +7,26 @@
   import Legend from './components/Legend.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
   import { selectedDate } from './stores/selectedDate.js';
-  import { streetData, isLoading, error } from './stores/streetData.js';
+  import { streetData, isLoading, error, isLoadingViewport, viewportError } from './stores/streetData.js';
   import { theme } from './stores/theme.js';
   import { fetchStreetData } from './lib/api/stockholm.js';
   import type { StreetSegment } from './lib/api/stockholm.js';
 
   let mapComponent: Map;
 
-  onMount(async () => {
-    try {
-      isLoading.set(true);
-      error.set(null);
-      const data = await fetchStreetData();
-      streetData.set(data);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Okänt fel vid hämtning av data';
-      error.set(errorMessage);
-      console.error('Failed to load street data:', err);
-    } finally {
-      isLoading.set(false);
-    }
+  onMount(() => {
+    // Start background fetch of full dataset for search functionality
+    // This is non-blocking - the map will load viewport data immediately
+    fetchStreetData()
+      .then((data) => {
+        streetData.set(data);
+        console.log('Full dataset loaded in background for search');
+      })
+      .catch((err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Okänt fel vid hämtning av data';
+        error.set(errorMessage);
+        console.error('Failed to load full street data:', err);
+      });
   });
 
   function handleLocationFound(event: CustomEvent<{ lat: number; lng: number }>) {
@@ -64,21 +64,20 @@
   </div>
 
   <div class="map-wrapper">
-    {#if $isLoading}
+    {#if $isLoadingViewport}
       <div class="loading-overlay">
         <div class="spinner">⟳</div>
-        <p>Hämtar gatudata...</p>
+        <p>Hämtar gatudata för området...</p>
       </div>
-    {:else if $error}
+    {:else if $viewportError}
       <div class="error-overlay">
-        <p>❌ {$error}</p>
+        <p>❌ {$viewportError}</p>
         <button on:click={() => window.location.reload()}>Försök igen</button>
       </div>
     {/if}
     
     <Map
       bind:this={mapComponent}
-      streets={$streetData}
       selectedDate={$selectedDate}
       theme={$theme}
     />

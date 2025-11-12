@@ -29,19 +29,36 @@ export default async function handler(
     return;
   }
 
-  // Get the path from the request (e.g., /all from /api/all)
+  // Get the path from the request (e.g., /all from /api/all, or /within from /api/within)
   // request.query.path will be an array for catch-all routes
   const pathArray = request.query.path as string[] || [];
-  const apiPath = pathArray.length > 0 ? '/' + pathArray.join('/') : '/all';
+  const operation = pathArray.length > 0 ? pathArray[0] : 'all';
   
-  // Preserve any additional query parameters from the original request
+  // Build query parameters
   const queryParams = new URLSearchParams();
+  
+  // For 'within' operation, preserve radius, lat, lng parameters
+  if (operation === 'within') {
+    if (request.query.radius) {
+      queryParams.append('radius', request.query.radius as string);
+    }
+    if (request.query.lat) {
+      queryParams.append('lat', request.query.lat as string);
+    }
+    if (request.query.lng) {
+      queryParams.append('lng', request.query.lng as string);
+    }
+  }
+  
+  // Preserve outputFormat if provided
   if (request.query.outputFormat) {
     queryParams.append('outputFormat', request.query.outputFormat as string);
   }
+  
   queryParams.append('apiKey', apiKey);
   
   // Build the Stockholm API URL
+  const apiPath = operation === 'all' ? '/all' : `/${operation}`;
   const stockholmUrl = `https://openparking.stockholm.se/LTF-Tolken/v1/servicedagar${apiPath}?${queryParams.toString()}`;
 
   try {

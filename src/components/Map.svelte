@@ -5,8 +5,10 @@
   import type { StreetSegment } from '../lib/api/stockholm.js';
   import { getAvailabilityColor, daysUntilCleaning } from '../lib/utils/dateUtils.js';
   import type { Theme } from '../stores/theme.js';
+  import { getViewportCenterAndRadius, hasViewportChangedSignificantly } from '../lib/utils/coordinateUtils.js';
+  import { fetchStreetDataByViewport } from '../lib/api/stockholm.js';
+  import { viewportStreets, isLoadingViewport, viewportError } from '../stores/streetData.js';
 
-  export let streets: StreetSegment[] = [];
   export let selectedDate: Date = new Date();
   export let theme: Theme = 'dark';
 
@@ -14,23 +16,68 @@
   let map: L.Map;
   let streetLayers: L.Polyline[] = [];
   let tileLayer: L.TileLayer | null = null;
+  let currentViewport: { center: [number, number]; radius: number } | null = null;
+  let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Stockholm coordinates
   const STOCKHOLM_CENTER: [number, number] = [59.3293, 18.0686];
 
   onMount(() => {
-    // Initialize map
+    // Initialize map with zoom 15 for faster initial load
     map = L.map(mapContainer, {
       center: STOCKHOLM_CENTER,
-      zoom: 14
+      zoom: 15
     });
 
     // Add initial tile layer based on theme
     updateTileLayer();
 
-    // Initial render
-    updateStreetLayers();
+    // Load initial viewport data
+    loadViewportData();
+
+    // Listen to map movement events
+    map.on('moveend', handleViewportChange);
+    map.on('zoomend', handleViewportChange);
   });
+
+  async function loadViewportData() {
+    if (!map) return;
+
+    const bounds = map.getBounds();
+    const viewport = getViewportCenterAndRadius(bounds);
+
+    // Check if viewport changed significantly
+    if (!hasViewportChangedSignificantly(currentViewport, viewport)) {
+      return; // Skip if viewport hasn't changed much
+    }
+
+    currentViewport = viewport;
+
+    try {
+      isLoadingViewport.set(true);
+      viewportError.set(null);
+
+      const streets = await fetchStreetDataByViewport(viewport.center, viewport.radius);
+      viewportStreets.set(streets);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Okänt fel vid hämtning av data';
+      viewportError.set(errorMessage);
+      console.error('Failed to load viewport street data:', err);
+    } finally {
+      isLoadingViewport.set(false);
+    }
+  }
+
+  function handleViewportChange() {
+    // Debounce viewport changes (wait 300ms after user stops panning/zooming)
+    if (viewportUpdateTimeout) {
+      clearTimeout(viewportUpdateTimeout);
+    }
+    
+    viewportUpdateTimeout = setTimeout(() => {
+      loadViewportData();
+    }, 300);
+  }
 
   // Update tile layer when theme changes
   function updateTileLayer() {
@@ -58,8 +105,8 @@
     updateTileLayer();
   }
 
-  // Update street layers when streets, date, or theme changes
-  $: if (map && streets && selectedDate) {
+  // Update street layers when viewport streets, date, or theme changes
+  $: if (map && $viewportStreets && selectedDate) {
     updateStreetLayers();
   }
 
@@ -69,6 +116,7 @@
       return;
     }
 
+    const streets = $viewportStreets;
     console.log(`Updating street layers: ${streets.length} streets, date: ${selectedDate.toISOString()}`);
 
     // Remove existing layers
@@ -190,23 +238,13 @@
     });
 
     console.log(`Rendered ${validStreets} valid streets, ${invalidStreets} invalid streets, total layers: ${streetLayers.length}`);
-    
-    if (streetLayers.length > 0) {
-      // Fit map to show all street bounds
-      const allBounds = streetLayers.map(layer => layer.getBounds()).filter(bounds => bounds.isValid());
-      if (allBounds.length > 0) {
-        const groupBounds = allBounds.reduce((acc, bounds) => {
-          return acc.extend(bounds);
-        }, allBounds[0]);
-        map.fitBounds(groupBounds, { padding: [50, 50] });
-        console.log('Fitted map bounds:', groupBounds.toBBoxString());
-      }
-    }
   }
 
   export function centerMap(lat: number, lng: number) {
     if (map) {
       map.setView([lat, lng], 15);
+      // Trigger viewport update after map moves
+      // The moveend event will be fired automatically
     }
   }
 
@@ -251,7 +289,12 @@
   }
 
   onDestroy(() => {
+    if (viewportUpdateTimeout) {
+      clearTimeout(viewportUpdateTimeout);
+    }
     if (map) {
+      map.off('moveend', handleViewportChange);
+      map.off('zoomend', handleViewportChange);
       map.remove();
     }
   });
