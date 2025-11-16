@@ -105,6 +105,7 @@ class StreetCache {
     this.streetMap.clear();
     this.viewportCache.clear();
     try {
+      // Use the same prefix as cache.ts
       localStorage.removeItem(`stockholm-street-data-${this.cacheKey}`);
     } catch (error) {
       console.error('Error clearing street cache:', error);

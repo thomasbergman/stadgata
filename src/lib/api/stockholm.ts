@@ -291,28 +291,35 @@ function transformAPIResponse(data: StockholmAPIResponse): StreetSegment[] {
 
 /**
  * Fetch street cleaning data for a specific viewport using the 'within' operation
- * Uses cache if available and valid (24 hours)
+ * Uses improved street-level cache to avoid duplicates and enable merging
  * @param center - [latitude, longitude] of the viewport center
  * @param radius - Radius in meters from the center
+ * @param skipPrefetch - If true, skip background prefetching (for prefetch calls themselves)
  * @returns Array of street segments within the viewport
  */
 export async function fetchStreetDataByViewport(
   center: [number, number],
-  radius: number
+  radius: number,
+  skipPrefetch: boolean = false
 ): Promise<StreetSegment[]> {
   const [lat, lng] = center;
+  const cache = getStreetCache();
+  const cacheKey = getViewportCacheKey(center, radius);
   
-  // Create cache key based on viewport (rounded to avoid cache fragmentation)
-  const roundedLat = Math.round(lat * 100) / 100; // Round to ~1km precision
-  const roundedLng = Math.round(lng * 100) / 100;
-  const roundedRadius = Math.round(radius / 100) * 100; // Round to 100m precision
-  const cacheKey = `viewport-${roundedLat}-${roundedLng}-${roundedRadius}`;
-  
-  // Check cache first
-  const cached = getCachedData<StreetSegment[]>(cacheKey);
-  if (cached) {
-    console.log(`Using cached viewport data for ${cacheKey}`);
-    return cached;
+  // Check improved cache first
+  if (cache.hasViewport(cacheKey)) {
+    const cachedStreets = cache.getStreetsForViewport(cacheKey);
+    console.log(`Using cached viewport data for ${cacheKey}: ${cachedStreets.length} streets`);
+    
+    // Prefetch surrounding areas in background (if not already prefetching)
+    if (!skipPrefetch) {
+      const prefetchManager = getPrefetchManager();
+      prefetchManager.prefetchSurrounding(center, radius, (c, r) => 
+        fetchStreetDataByViewport(c, r, true)
+      ).catch(err => console.warn('Background prefetch failed:', err));
+    }
+    
+    return cachedStreets;
   }
 
   try {
@@ -395,10 +402,15 @@ export async function fetchStreetDataByViewport(
       });
     }
     
-    // Cache the transformed data
-    const cached = setCachedData(cacheKey, streets);
-    if (!cached) {
-      console.log('Viewport data not cached due to storage limitations, but fetched successfully');
+    // Cache using improved street-level cache
+    cache.addStreetsForViewport(cacheKey, streets);
+    
+    // Prefetch surrounding areas in background (if not already prefetching)
+    if (!skipPrefetch) {
+      const prefetchManager = getPrefetchManager();
+      prefetchManager.prefetchSurrounding(center, radius, (c, r) => 
+        fetchStreetDataByViewport(c, r, true)
+      ).catch(err => console.warn('Background prefetch failed:', err));
     }
     
     return streets;
