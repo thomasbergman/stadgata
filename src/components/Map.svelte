@@ -50,6 +50,27 @@
         map.on('zoomend', handleViewportChange);
       }, 100);
     });
+
+    // Handle window resize (important for mobile when address bar shows/hides)
+    const handleResize = () => {
+      if (map) {
+        // Small delay to let the resize complete
+        setTimeout(() => {
+          map.invalidateSize();
+          // Reload viewport data if map size changed significantly
+          loadViewportData();
+        }, 150);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   });
 
   async function loadViewportData() {
@@ -126,12 +147,32 @@
       isLoadingViewport.set(true);
       viewportError.set(null);
 
+      console.log('Starting fetch for viewport:', {
+        center: viewport.center,
+        radius: viewport.radius,
+        url: `/api/within?radius=${viewport.radius}&lat=${viewport.center[0]}&lng=${viewport.center[1]}&outputFormat=json`
+      });
+
       const streets = await fetchStreetDataByViewport(viewport.center, viewport.radius);
+      
+      console.log('Successfully fetched streets:', streets.length);
       viewportStreets.set(streets);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Okänt fel vid hämtning av data';
+      console.error('Failed to load viewport street data:', {
+        error: err,
+        errorType: err instanceof Error ? err.constructor.name : typeof err,
+        errorMessage: err instanceof Error ? err.message : String(err),
+        viewport: viewport
+      });
+      
+      let errorMessage = 'Okänt fel vid hämtning av data';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
       viewportError.set(errorMessage);
-      console.error('Failed to load viewport street data:', err);
     } finally {
       isLoadingViewport.set(false);
     }

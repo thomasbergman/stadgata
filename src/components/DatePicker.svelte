@@ -21,13 +21,13 @@
 </script>
 
 <div class="date-picker-container">
-  <label for="date-input" class="date-label">Välj datum:</label>
   <input
     id="date-input"
     type="date"
     bind:value={dateValue}
     on:change={handleDateChange}
     class="date-input"
+    title="Välj datum"
   />
 </div>
 
@@ -35,61 +35,41 @@
   .date-picker-container {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    background: #1f2937;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    border: 1px solid #374151;
-    transition: background-color 0.3s, border-color 0.3s;
-  }
-
-  :global([data-theme='light']) .date-picker-container {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .date-label {
-    font-weight: 500;
-    color: #f9fafb;
-    font-size: 0.875rem;
-    transition: color 0.3s;
-  }
-
-  :global([data-theme='light']) .date-label {
-    color: #111827;
   }
 
   .date-input {
     padding: 0.5rem;
-    border: 1px solid #4b5563;
-    border-radius: 4px;
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
     font-size: 0.875rem;
     cursor: pointer;
-    background: #111827;
-    color: #f9fafb;
-    transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-  }
-
-  :global([data-theme='light']) .date-input {
-    background: #ffffff;
-    border: 1px solid #d1d5db;
-    color: #111827;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    width: auto;
+    min-width: 140px;
   }
 
   .date-input:hover {
-    border-color: #6b7280;
-  }
-
-  :global([data-theme='light']) .date-input:hover {
-    border-color: #9ca3af;
+    border-color: hsl(var(--input));
   }
 
   .date-input:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    border-color: hsl(var(--ring));
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+  }
+
+  /* Style the date picker icon */
+  .date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.7;
+    filter: invert(0.5);
+  }
+
+  :global([data-theme='light']) .date-input::-webkit-calendar-picker-indicator {
+    filter: invert(0);
   }
 </style>
 

@@ -1,5 +1,6 @@
 import { getCachedData, setCachedData } from './cache.js';
 import { transformCoordinates } from '../utils/coordinateUtils.js';
+import { getStreetCache, getViewportCacheKey, getPrefetchManager } from './viewportCache.js';
 
 // Get API key from environment variable
 // In Vite, environment variables must be prefixed with VITE_ to be exposed to the client
@@ -60,7 +61,36 @@ export async function fetchStreetData(): Promise<StreetSegment[]> {
     const url = `${BASE_URL}/all?outputFormat=json`;
     console.log('Fetching street data from API...', url);
     
-    const response = await fetch(url);
+    // Add timeout for mobile networks (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error('Fetch timeout after 30 seconds');
+          throw new Error('Begäran tog för lång tid. Kontrollera din internetanslutning.');
+        }
+        // Check for network errors
+        if (fetchError.message.includes('Failed to fetch') || 
+            fetchError.message.includes('NetworkError') ||
+            fetchError.message.includes('Network request failed')) {
+          console.error('Network error:', fetchError.message);
+          throw new Error('Nätverksfel. Kontrollera din internetanslutning och försök igen.');
+        }
+      }
+      throw fetchError;
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -291,7 +321,36 @@ export async function fetchStreetDataByViewport(
     const url = `${BASE_URL}/within?radius=${radius}&lat=${lat}&lng=${lng}&outputFormat=json`;
     console.log(`Fetching street data for viewport: center [${lat}, ${lng}], radius ${radius}m...`);
     
-    const response = await fetch(url);
+    // Add timeout for mobile networks (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error('Fetch timeout after 30 seconds');
+          throw new Error('Begäran tog för lång tid. Kontrollera din internetanslutning.');
+        }
+        // Check for network errors
+        if (fetchError.message.includes('Failed to fetch') || 
+            fetchError.message.includes('NetworkError') ||
+            fetchError.message.includes('Network request failed')) {
+          console.error('Network error:', fetchError.message);
+          throw new Error('Nätverksfel. Kontrollera din internetanslutning och försök igen.');
+        }
+      }
+      throw fetchError;
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -325,6 +384,16 @@ export async function fetchStreetDataByViewport(
     const streets = transformAPIResponse(data);
 
     console.log(`Fetched ${streets.length} street segments for viewport`);
+    
+    // If we got no streets, log a warning but don't throw an error
+    // (this might be normal if the viewport has no streets)
+    if (streets.length === 0) {
+      console.warn('No street segments found for viewport:', {
+        center: [lat, lng],
+        radius: radius,
+        dataFeatures: data.features?.length || 0
+      });
+    }
     
     // Cache the transformed data
     const cached = setCachedData(cacheKey, streets);

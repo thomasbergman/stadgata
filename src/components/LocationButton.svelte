@@ -61,12 +61,19 @@
     disabled={isLoading}
     class="location-button"
     title="Hitta min plats"
+    aria-label="Hitta min plats"
   >
     {#if isLoading}
-      <span class="spinner">⟳</span>
-      Hittar...
+      <svg class="spinner-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-dasharray="32" stroke-dashoffset="32">
+          <animate attributeName="stroke-dasharray" dur="2s" values="0 32;16 16;0 32;0 32" repeatCount="indefinite"/>
+          <animate attributeName="stroke-dashoffset" dur="2s" values="0;-16;-32;-32" repeatCount="indefinite"/>
+        </circle>
+      </svg>
     {:else}
-      📍 Hitta min plats
+      <svg class="icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
+      </svg>
     {/if}
   </button>
   {#if error}
@@ -76,65 +83,65 @@
 
 <style>
   .location-button-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    position: relative;
   }
 
   .location-button {
-    padding: 0.625rem 1rem;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 0.2s;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    white-space: nowrap;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+    border-radius: 0.5rem;
+    color: hsl(var(--foreground));
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   }
 
   .location-button:hover:not(:disabled) {
-    background: #2563eb;
+    background: hsl(var(--accent));
+    border-color: hsl(var(--border));
   }
 
   .location-button:disabled {
-    background: #9ca3af;
+    opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .spinner {
-    display: inline-block;
-    animation: spin 1s linear infinite;
+  .location-button:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
+  .icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: hsl(var(--foreground));
+  }
+
+  .spinner-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: hsl(var(--foreground));
   }
 
   .error-message {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    left: 0;
     font-size: 0.75rem;
-    color: #ef4444;
-    padding: 0.25rem 0.5rem;
-    background: #7f1d1d;
-    border-radius: 4px;
+    color: hsl(var(--destructive));
+    padding: 0.5rem;
+    background: hsl(var(--destructive) / 0.1);
+    border-radius: 0.375rem;
     max-width: 200px;
-    border: 1px solid #991b1b;
-    transition: background-color 0.3s, border-color 0.3s;
-  }
-
-  :global([data-theme='light']) .error-message {
-    background: #fee2e2;
-    border: 1px solid #fecaca;
-    color: #dc2626;
+    border: 1px solid hsl(var(--destructive) / 0.2);
+    z-index: 1000;
+    white-space: nowrap;
   }
 </style>
 
