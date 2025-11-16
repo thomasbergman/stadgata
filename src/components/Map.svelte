@@ -18,6 +18,8 @@
   let tileLayer: L.TileLayer | null = null;
   let currentViewport: { center: [number, number]; radius: number } | null = null;
   let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
+  let loadViewportRetryCount = 0;
+  const MAX_RETRIES = 10;
 
   // Stockholm coordinates
   const STOCKHOLM_CENTER: [number, number] = [59.3293, 18.0686];
@@ -32,19 +34,86 @@
     // Add initial tile layer based on theme
     updateTileLayer();
 
-    // Load initial viewport data
-    loadViewportData();
+    // On mobile, the map container might not have proper dimensions yet
+    // Wait for the map to be ready and ensure it has valid bounds
+    map.whenReady(() => {
+      // Invalidate size to ensure Leaflet recalculates dimensions (important for mobile)
+      map.invalidateSize();
+      
+      // Small delay to ensure bounds are calculated properly on mobile
+      setTimeout(() => {
+        // Load initial viewport data
+        loadViewportData();
 
-    // Listen to map movement events
-    map.on('moveend', handleViewportChange);
-    map.on('zoomend', handleViewportChange);
+        // Listen to map movement events
+        map.on('moveend', handleViewportChange);
+        map.on('zoomend', handleViewportChange);
+      }, 100);
+    });
   });
 
   async function loadViewportData() {
     if (!map) return;
 
+    // Ensure map has valid bounds (important for mobile)
     const bounds = map.getBounds();
+    if (!bounds) {
+      if (loadViewportRetryCount < MAX_RETRIES) {
+        loadViewportRetryCount++;
+        console.warn(`Map bounds not available yet, retrying... (${loadViewportRetryCount}/${MAX_RETRIES})`);
+        // Retry after a short delay if bounds aren't available
+        setTimeout(() => loadViewportData(), 200);
+        return;
+      } else {
+        console.error('Failed to get map bounds after maximum retries');
+        viewportError.set('Kunde inte ladda kartan. Försök ladda om sidan.');
+        isLoadingViewport.set(false);
+        return;
+      }
+    }
+
+    // Check if bounds have valid coordinates
+    const ne = bounds.getNorthEast();
+    const sw = bounds.getSouthWest();
+    if (!ne || !sw || 
+        isNaN(ne.lat) || isNaN(ne.lng) || 
+        isNaN(sw.lat) || isNaN(sw.lng) ||
+        ne.lat === sw.lat || ne.lng === sw.lng) {
+      if (loadViewportRetryCount < MAX_RETRIES) {
+        loadViewportRetryCount++;
+        console.warn(`Map bounds not valid yet, retrying... (${loadViewportRetryCount}/${MAX_RETRIES})`, { ne, sw });
+        // Retry after a short delay if bounds aren't valid
+        setTimeout(() => loadViewportData(), 200);
+        return;
+      } else {
+        console.error('Invalid map bounds after maximum retries');
+        viewportError.set('Kunde inte ladda kartan. Försök ladda om sidan.');
+        isLoadingViewport.set(false);
+        return;
+      }
+    }
+
     const viewport = getViewportCenterAndRadius(bounds);
+
+    // Validate viewport values
+    if (!viewport || !viewport.center || !viewport.radius || 
+        isNaN(viewport.center[0]) || isNaN(viewport.center[1]) || 
+        isNaN(viewport.radius) || viewport.radius <= 0) {
+      if (loadViewportRetryCount < MAX_RETRIES) {
+        loadViewportRetryCount++;
+        console.warn(`Invalid viewport calculated, retrying... (${loadViewportRetryCount}/${MAX_RETRIES})`, viewport);
+        setTimeout(() => loadViewportData(), 200);
+        return;
+      } else {
+        console.error('Invalid viewport after maximum retries');
+        viewportError.set('Kunde inte beräkna kartområde. Försök ladda om sidan.');
+        isLoadingViewport.set(false);
+        return;
+      }
+    }
+
+    // Reset retry count on success (all validations passed)
+    loadViewportRetryCount = 0;
 
     // Check if viewport changed significantly
     if (!hasViewportChangedSignificantly(currentViewport, viewport)) {
