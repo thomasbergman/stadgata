@@ -8,6 +8,7 @@
   import { getViewportCenterAndRadius, hasViewportChangedSignificantly } from '../lib/utils/coordinateUtils.js';
   import { fetchStreetDataByViewport } from '../lib/api/stockholm.js';
   import { viewportStreets, isLoadingViewport, viewportError } from '../stores/streetData.js';
+  import { getStreetCache, getViewportCacheKey } from '../lib/api/viewportCache.js';
 
   export let selectedDate: Date = new Date();
   export let theme: Theme = 'dark';
@@ -20,6 +21,7 @@
   let viewportUpdateTimeout: ReturnType<typeof setTimeout> | null = null;
   let loadViewportRetryCount = 0;
   const MAX_RETRIES = 10;
+  let cachedStreetsForCurrentView: StreetSegment[] = [];
 
   // Stockholm coordinates
   const STOCKHOLM_CENTER: [number, number] = [59.3293, 18.0686];
@@ -50,6 +52,27 @@
         map.on('zoomend', handleViewportChange);
       }, 100);
     });
+
+    // Handle window resize (important for mobile when address bar shows/hides)
+    const handleResize = () => {
+      if (map) {
+        // Small delay to let the resize complete
+        setTimeout(() => {
+          map.invalidateSize();
+          // Reload viewport data if map size changed significantly
+          loadViewportData();
+        }, 150);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
   });
 
   async function loadViewportData() {
@@ -117,24 +140,115 @@
 
     // Check if viewport changed significantly
     if (!hasViewportChangedSignificantly(currentViewport, viewport)) {
+      // Viewport hasn't changed much, but check if we have cached data for current view
+      const cache = getStreetCache();
+      const cacheKey = getViewportCacheKey(viewport.center, viewport.radius);
+      if (cache.hasViewport(cacheKey)) {
+        const cachedStreets = cache.getStreetsForViewport(cacheKey);
+        if (cachedStreets.length > 0) {
+          viewportStreets.set(cachedStreets);
+          cachedStreetsForCurrentView = cachedStreets;
+        }
+      }
       return; // Skip if viewport hasn't changed much
     }
 
     currentViewport = viewport;
 
-    try {
-      isLoadingViewport.set(true);
-      viewportError.set(null);
-
-      const streets = await fetchStreetDataByViewport(viewport.center, viewport.radius);
-      viewportStreets.set(streets);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Okänt fel vid hämtning av data';
-      viewportError.set(errorMessage);
-      console.error('Failed to load viewport street data:', err);
-    } finally {
-      isLoadingViewport.set(false);
+    // Check cache first - if we have data, use it immediately without showing loading
+    const cache = getStreetCache();
+    const cacheKey = getViewportCacheKey(viewport.center, viewport.radius);
+    
+    if (cache.hasViewport(cacheKey)) {
+      const cachedStreets = cache.getStreetsForViewport(cacheKey);
+      console.log(`Using cached data for viewport: ${cachedStreets.length} streets`);
+      viewportStreets.set(cachedStreets);
+      cachedStreetsForCurrentView = cachedStreets;
+      // Don't set loading state if we have cached data
+      return;
     }
+
+    // Also check if we can merge data from nearby cached viewports
+    // This helps when scrolling to areas we've partially cached
+    const allCachedStreets = cache.getAllStreets();
+    if (allCachedStreets.length > 0) {
+      // Filter streets that are likely visible in current viewport
+      const visibleCached = allCachedStreets.filter(street => {
+        if (street.coordinates.length === 0) return false;
+        // Check if any coordinate is within the viewport bounds
+        return street.coordinates.some(([lng, lat]) => {
+          return lat >= sw.lat && lat <= ne.lat && lng >= sw.lng && lng <= ne.lng;
+        });
+      });
+      
+      if (visibleCached.length > 0) {
+        console.log(`Using ${visibleCached.length} cached streets from nearby viewports`);
+        viewportStreets.set(visibleCached);
+        cachedStreetsForCurrentView = visibleCached;
+        // Still fetch in background to get complete data, but don't block UI
+      }
+    }
+
+    // Use setTimeout to yield to event loop and prevent blocking
+    setTimeout(async () => {
+      try {
+        // Only show loading if we don't have any cached data
+        if (cachedStreetsForCurrentView.length === 0) {
+          isLoadingViewport.set(true);
+        }
+        viewportError.set(null);
+
+        console.log('Starting fetch for viewport:', {
+          center: viewport.center,
+          radius: viewport.radius,
+          url: `/api/within?radius=${viewport.radius}&lat=${viewport.center[0]}&lng=${viewport.center[1]}&outputFormat=json`
+        });
+
+        // Increase radius by 50% to fetch more data and reduce future requests
+        const expandedRadius = Math.round(viewport.radius * 1.5);
+        const streets = await fetchStreetDataByViewport(viewport.center, expandedRadius);
+        
+        console.log('Successfully fetched streets:', streets.length);
+        
+        // Use requestAnimationFrame to batch DOM updates and prevent blocking
+        requestAnimationFrame(() => {
+          // Merge with any existing cached streets for this view
+          const streetMap = new Map<string, StreetSegment>();
+          // Add existing cached streets
+          cachedStreetsForCurrentView.forEach(street => {
+            streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
+          });
+          // Add newly fetched streets (will overwrite duplicates)
+          streets.forEach(street => {
+            streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
+          });
+          
+          const mergedStreets = Array.from(streetMap.values());
+          viewportStreets.set(mergedStreets);
+          cachedStreetsForCurrentView = mergedStreets;
+        });
+      } catch (err) {
+        console.error('Failed to load viewport street data:', {
+          error: err,
+          errorType: err instanceof Error ? err.constructor.name : typeof err,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          viewport: viewport
+        });
+        
+        // Only show error if we don't have cached data to fall back to
+        if (cachedStreetsForCurrentView.length === 0) {
+          let errorMessage = 'Okänt fel vid hämtning av data';
+          if (err instanceof Error) {
+            errorMessage = err.message;
+          } else if (typeof err === 'string') {
+            errorMessage = err;
+          }
+          viewportError.set(errorMessage);
+        }
+      } finally {
+        isLoadingViewport.set(false);
+      }
+    }, 0);
   }
 
   function handleViewportChange() {

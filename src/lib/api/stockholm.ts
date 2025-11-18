@@ -1,5 +1,6 @@
 import { getCachedData, setCachedData } from './cache.js';
 import { transformCoordinates } from '../utils/coordinateUtils.js';
+import { getStreetCache, getViewportCacheKey, getPrefetchManager } from './viewportCache.js';
 
 // Get API key from environment variable
 // In Vite, environment variables must be prefixed with VITE_ to be exposed to the client
@@ -60,7 +61,36 @@ export async function fetchStreetData(): Promise<StreetSegment[]> {
     const url = `${BASE_URL}/all?outputFormat=json`;
     console.log('Fetching street data from API...', url);
     
-    const response = await fetch(url);
+    // Add timeout for mobile networks (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error('Fetch timeout after 30 seconds');
+          throw new Error('Begäran tog för lång tid. Kontrollera din internetanslutning.');
+        }
+        // Check for network errors
+        if (fetchError.message.includes('Failed to fetch') || 
+            fetchError.message.includes('NetworkError') ||
+            fetchError.message.includes('Network request failed')) {
+          console.error('Network error:', fetchError.message);
+          throw new Error('Nätverksfel. Kontrollera din internetanslutning och försök igen.');
+        }
+      }
+      throw fetchError;
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -261,28 +291,35 @@ function transformAPIResponse(data: StockholmAPIResponse): StreetSegment[] {
 
 /**
  * Fetch street cleaning data for a specific viewport using the 'within' operation
- * Uses cache if available and valid (24 hours)
+ * Uses improved street-level cache to avoid duplicates and enable merging
  * @param center - [latitude, longitude] of the viewport center
  * @param radius - Radius in meters from the center
+ * @param skipPrefetch - If true, skip background prefetching (for prefetch calls themselves)
  * @returns Array of street segments within the viewport
  */
 export async function fetchStreetDataByViewport(
   center: [number, number],
-  radius: number
+  radius: number,
+  skipPrefetch: boolean = false
 ): Promise<StreetSegment[]> {
   const [lat, lng] = center;
+  const cache = getStreetCache();
+  const cacheKey = getViewportCacheKey(center, radius);
   
-  // Create cache key based on viewport (rounded to avoid cache fragmentation)
-  const roundedLat = Math.round(lat * 100) / 100; // Round to ~1km precision
-  const roundedLng = Math.round(lng * 100) / 100;
-  const roundedRadius = Math.round(radius / 100) * 100; // Round to 100m precision
-  const cacheKey = `viewport-${roundedLat}-${roundedLng}-${roundedRadius}`;
-  
-  // Check cache first
-  const cached = getCachedData<StreetSegment[]>(cacheKey);
-  if (cached) {
-    console.log(`Using cached viewport data for ${cacheKey}`);
-    return cached;
+  // Check improved cache first
+  if (cache.hasViewport(cacheKey)) {
+    const cachedStreets = cache.getStreetsForViewport(cacheKey);
+    console.log(`Using cached viewport data for ${cacheKey}: ${cachedStreets.length} streets`);
+    
+    // Prefetch surrounding areas in background (if not already prefetching)
+    if (!skipPrefetch) {
+      const prefetchManager = getPrefetchManager();
+      prefetchManager.prefetchSurrounding(center, radius, (c, r) => 
+        fetchStreetDataByViewport(c, r, true)
+      ).catch(err => console.warn('Background prefetch failed:', err));
+    }
+    
+    return cachedStreets;
   }
 
   try {
@@ -291,7 +328,36 @@ export async function fetchStreetDataByViewport(
     const url = `${BASE_URL}/within?radius=${radius}&lat=${lat}&lng=${lng}&outputFormat=json`;
     console.log(`Fetching street data for viewport: center [${lat}, ${lng}], radius ${radius}m...`);
     
-    const response = await fetch(url);
+    // Add timeout for mobile networks (30 seconds)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error('Fetch timeout after 30 seconds');
+          throw new Error('Begäran tog för lång tid. Kontrollera din internetanslutning.');
+        }
+        // Check for network errors
+        if (fetchError.message.includes('Failed to fetch') || 
+            fetchError.message.includes('NetworkError') ||
+            fetchError.message.includes('Network request failed')) {
+          console.error('Network error:', fetchError.message);
+          throw new Error('Nätverksfel. Kontrollera din internetanslutning och försök igen.');
+        }
+      }
+      throw fetchError;
+    }
     
     if (!response.ok) {
       const errorText = await response.text();
@@ -326,10 +392,25 @@ export async function fetchStreetDataByViewport(
 
     console.log(`Fetched ${streets.length} street segments for viewport`);
     
-    // Cache the transformed data
-    const cached = setCachedData(cacheKey, streets);
-    if (!cached) {
-      console.log('Viewport data not cached due to storage limitations, but fetched successfully');
+    // If we got no streets, log a warning but don't throw an error
+    // (this might be normal if the viewport has no streets)
+    if (streets.length === 0) {
+      console.warn('No street segments found for viewport:', {
+        center: [lat, lng],
+        radius: radius,
+        dataFeatures: data.features?.length || 0
+      });
+    }
+    
+    // Cache using improved street-level cache
+    cache.addStreetsForViewport(cacheKey, streets);
+    
+    // Prefetch surrounding areas in background (if not already prefetching)
+    if (!skipPrefetch) {
+      const prefetchManager = getPrefetchManager();
+      prefetchManager.prefetchSurrounding(center, radius, (c, r) => 
+        fetchStreetDataByViewport(c, r, true)
+      ).catch(err => console.warn('Background prefetch failed:', err));
     }
     
     return streets;

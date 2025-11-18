@@ -62,10 +62,40 @@ export default async function handler(
   const stockholmUrl = `https://openparking.stockholm.se/LTF-Tolken/v1/servicedagar${apiPath}?${queryParams.toString()}`;
 
   try {
-    // Fetch from Stockholm API
-    const apiResponse = await fetch(stockholmUrl);
+    console.log('Proxying request to Stockholm API:', stockholmUrl);
+    
+    // Add timeout for the fetch (25 seconds - Vercel functions have 30s timeout)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    
+    let apiResponse: Response;
+    try {
+      apiResponse = await fetch(stockholmUrl, {
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
+      clearTimeout(timeoutId);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        console.error('Stockholm API request timeout');
+        response.status(504).json({
+          error: 'API request timeout - the Stockholm API took too long to respond'
+        });
+        return;
+      }
+      throw fetchError;
+    }
     
     if (!apiResponse.ok) {
+      const errorText = await apiResponse.text().catch(() => 'Unknown error');
+      console.error('Stockholm API error:', {
+        status: apiResponse.status,
+        statusText: apiResponse.statusText,
+        body: errorText.substring(0, 500)
+      });
       response.status(apiResponse.status).json({
         error: `API request failed: ${apiResponse.status} ${apiResponse.statusText}`
       });
@@ -74,10 +104,15 @@ export default async function handler(
 
     const data = await apiResponse.json();
     
+    console.log('Successfully proxied response from Stockholm API');
     // Return the data with CORS headers
     response.status(200).json(data);
   } catch (error) {
-    console.error('Error proxying request to Stockholm API:', error);
+    console.error('Error proxying request to Stockholm API:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      url: stockholmUrl
+    });
     response.status(500).json({
       error: error instanceof Error ? error.message : 'Unknown error'
     });

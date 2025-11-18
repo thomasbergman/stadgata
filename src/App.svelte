@@ -9,12 +9,18 @@
   import { selectedDate } from './stores/selectedDate.js';
   import { streetData, isLoading, error, isLoadingViewport, viewportError } from './stores/streetData.js';
   import { theme } from './stores/theme.js';
-  import { fetchStreetData } from './lib/api/stockholm.js';
+  import { fetchStreetData, fetchStreetDataByViewport } from './lib/api/stockholm.js';
   import type { StreetSegment } from './lib/api/stockholm.js';
+  import { preloadInitialMapData } from './lib/api/viewportCache.js';
 
   let mapComponent: Map;
 
   onMount(() => {
+    // Start background preload of map data immediately
+    // This warms up the cache so map interactions feel instant
+    preloadInitialMapData((center, radius) => fetchStreetDataByViewport(center, radius, true))
+      .catch(err => console.warn('Failed to start map data preload:', err));
+
     // Start background fetch of full dataset for search functionality
     // This is non-blocking - the map will load viewport data immediately
     fetchStreetData()
@@ -49,19 +55,20 @@
 
 <div class="app-container">
   <header class="app-header">
-    <h1>Stockholmsparkering</h1>
-    <p class="subtitle">Se vilka gator som är tillgängliga för parkering</p>
+    <div class="header-content">
+      <h1>Stockholmsparkering</h1>
+      <p class="subtitle">Se vilka gator som är tillgängliga för parkering</p>
+    </div>
+    <div class="header-actions">
+      <StreetSearch on:streetSelected={handleStreetSelected} />
+      <DatePicker />
+      <LocationButton
+        on:locationFound={handleLocationFound}
+        on:error={handleLocationError}
+      />
+      <ThemeToggle />
+    </div>
   </header>
-
-  <div class="controls-container">
-    <StreetSearch on:streetSelected={handleStreetSelected} />
-    <DatePicker />
-    <LocationButton
-      on:locationFound={handleLocationFound}
-      on:error={handleLocationError}
-    />
-    <ThemeToggle />
-  </div>
 
   <div class="map-wrapper">
     {#if $isLoadingViewport}
@@ -89,23 +96,57 @@
 </div>
 
 <style>
+  :global(:root) {
+    /* Dark theme colors (shadcn-inspired) */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+
+  :global([data-theme='light']) {
+    --background: 0 0% 100%;
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 224.3 76.3% 48%;
+  }
+
   :global(body) {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
     transition: background-color 0.3s, color 0.3s;
-  }
-
-  /* Dark theme (default) */
-  :global(body),
-  :global([data-theme='dark']) {
-    background: #111827;
-    color: #f9fafb;
-  }
-
-  /* Light theme */
-  :global([data-theme='light']) {
-    background: #f9fafb;
-    color: #111827;
   }
 
   .app-container {
@@ -114,68 +155,46 @@
     height: 100vh;
     width: 100vw;
     overflow: hidden;
-    background: #111827;
-    transition: background-color 0.3s;
-  }
-
-  :global([data-theme='light']) .app-container {
-    background: #f9fafb;
+    background: hsl(var(--background));
   }
 
   .app-header {
-    padding: 1rem 1.5rem;
-    background: #1f2937;
-    color: white;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    border-bottom: 1px solid #374151;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--border));
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     transition: background-color 0.3s, border-color 0.3s;
   }
 
-  :global([data-theme='light']) .app-header {
-    background: #ffffff;
-    border-bottom: 1px solid #e5e7eb;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  .header-content {
+    flex: 1;
+    min-width: 0;
   }
 
   .app-header h1 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     font-weight: 600;
-    color: #f9fafb;
-    transition: color 0.3s;
-  }
-
-  :global([data-theme='light']) .app-header h1 {
-    color: #111827;
+    color: hsl(var(--foreground));
+    line-height: 1.2;
   }
 
   .subtitle {
-    margin: 0.25rem 0 0 0;
-    font-size: 0.875rem;
-    color: #d1d5db;
-    transition: color 0.3s;
+    margin: 0.125rem 0 0 0;
+    font-size: 0.75rem;
+    color: hsl(var(--muted-foreground));
+    line-height: 1.2;
   }
 
-  :global([data-theme='light']) .subtitle {
-    color: #6b7280;
-  }
-
-  .controls-container {
+  .header-actions {
     display: flex;
-    gap: 1rem;
-    padding: 1rem 1.5rem;
-    background: #1f2937;
-    border-bottom: 1px solid #374151;
-    flex-wrap: wrap;
     align-items: center;
-    position: relative;
-    z-index: 1000;
-    transition: background-color 0.3s, border-color 0.3s;
-  }
-
-  :global([data-theme='light']) .controls-container {
-    background: #ffffff;
-    border-bottom: 1px solid #e5e7eb;
+    gap: 0.5rem;
+    flex-shrink: 0;
   }
 
   .map-wrapper {
@@ -250,12 +269,28 @@
   }
 
   @media (max-width: 768px) {
-    .app-header h1 {
-      font-size: 1.25rem;
+    .app-header {
+      flex-direction: column;
+      align-items: flex-start;
+      padding: 0.75rem;
     }
 
-    .controls-container {
-      padding: 0.75rem;
+    .header-content {
+      width: 100%;
+    }
+
+    .app-header h1 {
+      font-size: 1.125rem;
+    }
+
+    .subtitle {
+      font-size: 0.6875rem;
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-content: flex-start;
+      flex-wrap: wrap;
     }
 
     .sidebar {
