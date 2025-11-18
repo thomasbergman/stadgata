@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import Button from './ui/button.svelte';
 
   const dispatch = createEventDispatcher<{
     locationFound: { lat: number; lng: number };
@@ -56,10 +57,11 @@
 </script>
 
 <div class="location-button-container">
-  <button
+  <Button
     on:click={findLocation}
     disabled={isLoading}
-    class="location-button"
+    size="icon"
+    variant="outline"
     title="Hitta min plats"
     aria-label="Hitta min plats"
   >
@@ -75,7 +77,7 @@
         <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="currentColor"/>
       </svg>
     {/if}
-  </button>
+  </Button>
   {#if error}
     <div class="error-message">{error}</div>
   {/if}
@@ -84,37 +86,6 @@
 <style>
   .location-button-container {
     position: relative;
-  }
-
-  .location-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    padding: 0;
-    background: hsl(var(--background));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    color: hsl(var(--foreground));
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-
-  .location-button:hover:not(:disabled) {
-    background: hsl(var(--accent));
-    border-color: hsl(var(--border));
-  }
-
-  .location-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .location-button:focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 2px;
   }
 
   .icon {

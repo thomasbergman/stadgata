@@ -1,13 +1,15 @@
 <script lang="ts">
   import { theme } from '../stores/theme.js';
+  import Button from './ui/button.svelte';
   
   function toggleTheme() {
     theme.update(current => current === 'dark' ? 'light' : 'dark');
   }
 </script>
 
-<button 
-  class="theme-toggle" 
+<Button 
+  size="icon"
+  variant="outline"
   on:click={toggleTheme} 
   aria-label={$theme === 'dark' ? 'Växla till ljust tema' : 'Växla till mörkt tema'}
   title={$theme === 'dark' ? 'Ljus' : 'Mörk'}
@@ -22,35 +24,9 @@
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   {/if}
-</button>
+</Button>
 
 <style>
-  .theme-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    padding: 0;
-    background: hsl(var(--background));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    color: hsl(var(--foreground));
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-
-  .theme-toggle:hover {
-    background: hsl(var(--accent));
-    border-color: hsl(var(--border));
-  }
-
-  .theme-toggle:focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 2px;
-  }
-
   .icon {
     width: 1.25rem;
     height: 1.25rem;

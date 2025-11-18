@@ -1,6 +1,7 @@
 <script lang="ts">
   import { streetData } from '../stores/streetData.js';
   import { createEventDispatcher } from 'svelte';
+  import Button from './ui/button.svelte';
   
   const dispatch = createEventDispatcher();
   
@@ -72,8 +73,9 @@
 
 <div class="search-container">
   {#if !isExpanded}
-    <button
-      class="search-toggle-button"
+    <Button
+      size="icon"
+      variant="outline"
       on:click={toggleSearch}
       aria-label="Sök gata"
       title="Sök gata"
@@ -82,7 +84,7 @@
         <circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2" fill="none"/>
         <path d="m21 21-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
       </svg>
-    </button>
+    </Button>
   {:else}
     <div class="search-expanded">
       <div class="search-input-wrapper">
@@ -110,7 +112,9 @@
           class="search-input"
         />
         {#if searchQuery}
-          <button 
+          <Button 
+            variant="ghost"
+            size="icon"
             class="clear-button"
             on:click={() => { searchQuery = ''; showResults = false; }}
             aria-label="Rensa sökning"
@@ -119,9 +123,11 @@
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
             </svg>
-          </button>
+          </Button>
         {/if}
-        <button
+        <Button
+          variant="ghost"
+          size="icon"
           class="close-button"
           on:click={toggleSearch}
           aria-label="Stäng sökning"
@@ -130,13 +136,14 @@
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
           </svg>
-        </button>
+        </Button>
       </div>
       
       {#if showResults && filteredStreets.length > 0}
         <div class="search-results">
           {#each filteredStreets as { street, index, segmentCount }}
-            <button
+            <Button
+              variant="ghost"
               class="search-result-item"
               on:click={() => selectStreet(street)}
               type="button"
@@ -150,7 +157,7 @@
               {#if street.addressRange}
                 <div class="result-address">{street.addressRange}</div>
               {/if}
-            </button>
+            </Button>
           {/each}
           {#if totalMatches > 10}
             <div class="result-footer">
@@ -172,33 +179,7 @@
     position: relative;
   }
 
-  .search-toggle-button {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.5rem;
-    height: 2.5rem;
-    padding: 0;
-    background: hsl(var(--background));
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    color: hsl(var(--foreground));
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  }
-
-  .search-toggle-button:hover {
-    background: hsl(var(--accent));
-    border-color: hsl(var(--border));
-  }
-
-  .search-toggle-button:focus-visible {
-    outline: 2px solid hsl(var(--ring));
-    outline-offset: 2px;
-  }
-
-  .search-toggle-button .icon {
+  .icon {
     width: 1.25rem;
     height: 1.25rem;
     color: hsl(var(--foreground));
@@ -252,28 +233,13 @@
   .close-button {
     position: absolute;
     right: 2.5rem;
-    background: none;
-    border: none;
-    color: hsl(var(--muted-foreground));
-    cursor: pointer;
     padding: 0.25rem;
     width: 1.25rem;
     height: 1.25rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: color 0.2s;
-    border-radius: 0.25rem;
   }
 
   .close-button {
     right: 0.5rem;
-  }
-
-  .clear-button:hover,
-  .close-button:hover {
-    color: hsl(var(--foreground));
-    background: hsl(var(--accent));
   }
 
   .clear-button svg,
@@ -300,20 +266,12 @@
     width: 100%;
     padding: 0.75rem 1rem;
     text-align: left;
-    background: transparent;
-    border: none;
+    justify-content: flex-start;
     border-bottom: 1px solid hsl(var(--border));
-    cursor: pointer;
-    transition: background-color 0.2s;
-    color: hsl(var(--foreground));
   }
 
   .search-result-item:last-child {
     border-bottom: none;
-  }
-
-  .search-result-item:hover {
-    background: hsl(var(--accent));
   }
 
   .result-street-name {
