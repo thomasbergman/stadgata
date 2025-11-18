@@ -9,12 +9,18 @@
   import { selectedDate } from './stores/selectedDate.js';
   import { streetData, isLoading, error, isLoadingViewport, viewportError } from './stores/streetData.js';
   import { theme } from './stores/theme.js';
-  import { fetchStreetData } from './lib/api/stockholm.js';
+  import { fetchStreetData, fetchStreetDataByViewport } from './lib/api/stockholm.js';
   import type { StreetSegment } from './lib/api/stockholm.js';
+  import { preloadInitialMapData } from './lib/api/viewportCache.js';
 
   let mapComponent: Map;
 
   onMount(() => {
+    // Start background preload of map data immediately
+    // This warms up the cache so map interactions feel instant
+    preloadInitialMapData((center, radius) => fetchStreetDataByViewport(center, radius, true))
+      .catch(err => console.warn('Failed to start map data preload:', err));
+
     // Start background fetch of full dataset for search functionality
     // This is non-blocking - the map will load viewport data immediately
     fetchStreetData()

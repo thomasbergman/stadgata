@@ -189,60 +189,66 @@
       }
     }
 
-    try {
-      // Only show loading if we don't have any cached data
-      if (cachedStreetsForCurrentView.length === 0) {
-        isLoadingViewport.set(true);
-      }
-      viewportError.set(null);
-
-      console.log('Starting fetch for viewport:', {
-        center: viewport.center,
-        radius: viewport.radius,
-        url: `/api/within?radius=${viewport.radius}&lat=${viewport.center[0]}&lng=${viewport.center[1]}&outputFormat=json`
-      });
-
-      // Increase radius by 50% to fetch more data and reduce future requests
-      const expandedRadius = Math.round(viewport.radius * 1.5);
-      const streets = await fetchStreetDataByViewport(viewport.center, expandedRadius);
-      
-      console.log('Successfully fetched streets:', streets.length);
-      
-      // Merge with any existing cached streets for this view
-      const streetMap = new Map<string, StreetSegment>();
-      // Add existing cached streets
-      cachedStreetsForCurrentView.forEach(street => {
-        streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
-      });
-      // Add newly fetched streets (will overwrite duplicates)
-      streets.forEach(street => {
-        streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
-      });
-      
-      const mergedStreets = Array.from(streetMap.values());
-      viewportStreets.set(mergedStreets);
-      cachedStreetsForCurrentView = mergedStreets;
-    } catch (err) {
-      console.error('Failed to load viewport street data:', {
-        error: err,
-        errorType: err instanceof Error ? err.constructor.name : typeof err,
-        errorMessage: err instanceof Error ? err.message : String(err),
-        viewport: viewport
-      });
-      
-      // Only show error if we don't have cached data to fall back to
-      if (cachedStreetsForCurrentView.length === 0) {
-        let errorMessage = 'Okänt fel vid hämtning av data';
-        if (err instanceof Error) {
-          errorMessage = err.message;
-        } else if (typeof err === 'string') {
-          errorMessage = err;
+    // Use setTimeout to yield to event loop and prevent blocking
+    setTimeout(async () => {
+      try {
+        // Only show loading if we don't have any cached data
+        if (cachedStreetsForCurrentView.length === 0) {
+          isLoadingViewport.set(true);
         }
-        viewportError.set(errorMessage);
+        viewportError.set(null);
+
+        console.log('Starting fetch for viewport:', {
+          center: viewport.center,
+          radius: viewport.radius,
+          url: `/api/within?radius=${viewport.radius}&lat=${viewport.center[0]}&lng=${viewport.center[1]}&outputFormat=json`
+        });
+
+        // Increase radius by 50% to fetch more data and reduce future requests
+        const expandedRadius = Math.round(viewport.radius * 1.5);
+        const streets = await fetchStreetDataByViewport(viewport.center, expandedRadius);
+        
+        console.log('Successfully fetched streets:', streets.length);
+        
+        // Use requestAnimationFrame to batch DOM updates and prevent blocking
+        requestAnimationFrame(() => {
+          // Merge with any existing cached streets for this view
+          const streetMap = new Map<string, StreetSegment>();
+          // Add existing cached streets
+          cachedStreetsForCurrentView.forEach(street => {
+            streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
+          });
+          // Add newly fetched streets (will overwrite duplicates)
+          streets.forEach(street => {
+            streetMap.set(street.id || `${street.streetName}-${street.addressRange}`, street);
+          });
+          
+          const mergedStreets = Array.from(streetMap.values());
+          viewportStreets.set(mergedStreets);
+          cachedStreetsForCurrentView = mergedStreets;
+        });
+      } catch (err) {
+        console.error('Failed to load viewport street data:', {
+          error: err,
+          errorType: err instanceof Error ? err.constructor.name : typeof err,
+          errorMessage: err instanceof Error ? err.message : String(err),
+          viewport: viewport
+        });
+        
+        // Only show error if we don't have cached data to fall back to
+        if (cachedStreetsForCurrentView.length === 0) {
+          let errorMessage = 'Okänt fel vid hämtning av data';
+          if (err instanceof Error) {
+            errorMessage = err.message;
+          } else if (typeof err === 'string') {
+            errorMessage = err;
+          }
+          viewportError.set(errorMessage);
+        }
+      } finally {
+        isLoadingViewport.set(false);
       }
-    } finally {
-      isLoadingViewport.set(false);
-    }
+    }, 0);
   }
 
   function handleViewportChange() {

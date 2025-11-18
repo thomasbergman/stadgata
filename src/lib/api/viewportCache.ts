@@ -230,3 +230,50 @@ export function getPrefetchManager(): PrefetchManager {
   return prefetchManagerInstance;
 }
 
+/**
+ * Preload map data for Stockholm center and surrounding areas
+ * This should be called immediately when the app loads to warm up the cache
+ * @param fetchFn - Function to fetch street data for a viewport
+ */
+export async function preloadInitialMapData(
+  fetchFn: (center: [number, number], radius: number) => Promise<StreetSegment[]>
+): Promise<void> {
+  const STOCKHOLM_CENTER: [number, number] = [59.3293, 18.0686];
+  const prefetchManager = getPrefetchManager();
+  
+  // Prefetch multiple radii to cover different zoom levels
+  // Start with smaller radius and expand outward
+  const radii = [
+    1000,   // ~1km - covers zoom level 15-16
+    2000,   // ~2km - covers zoom level 14-15
+    5000,   // ~5km - covers zoom level 13-14
+  ];
+
+  console.log('Starting background preload of map data...');
+  
+  // Use requestIdleCallback if available, otherwise setTimeout
+  const schedulePrefetch = (fn: () => void) => {
+    if ('requestIdleCallback' in window) {
+      requestIdleCallback(fn, { timeout: 2000 });
+    } else {
+      setTimeout(fn, 100);
+    }
+  };
+
+  // Prefetch center areas with different radii
+  for (const radius of radii) {
+    schedulePrefetch(() => {
+      prefetchManager.prefetchViewport(STOCKHOLM_CENTER, radius, fetchFn)
+        .catch(err => console.warn(`Failed to preload radius ${radius}m:`, err));
+    });
+  }
+
+  // Also prefetch surrounding areas for the most common zoom level (2000m radius)
+  schedulePrefetch(() => {
+    prefetchManager.prefetchSurrounding(STOCKHOLM_CENTER, 2000, fetchFn)
+      .catch(err => console.warn('Failed to preload surrounding areas:', err));
+  });
+
+  console.log('Background preload scheduled');
+}
+
