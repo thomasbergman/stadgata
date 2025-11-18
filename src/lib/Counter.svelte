@@ -1,10 +1,12 @@
 <script lang="ts">
+  import Button from '../../components/ui/button.svelte';
+  
   let count: number = $state(0)
   const increment = () => {
     count += 1
   }
 </script>
 
-<button onclick={increment}>
+<Button on:click={increment}>
   count is {count}
-</button>
+</Button>

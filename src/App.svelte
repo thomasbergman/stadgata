@@ -6,6 +6,7 @@
   import StreetSearch from './components/StreetSearch.svelte';
   import Legend from './components/Legend.svelte';
   import ThemeToggle from './components/ThemeToggle.svelte';
+  import Button from './components/ui/button.svelte';
   import { selectedDate } from './stores/selectedDate.js';
   import { streetData, isLoading, error, isLoadingViewport, viewportError } from './stores/streetData.js';
   import { theme } from './stores/theme.js';
@@ -79,7 +80,7 @@
     {:else if $viewportError}
       <div class="error-overlay">
         <p>❌ {$viewportError}</p>
-        <button on:click={() => window.location.reload()}>Försök igen</button>
+        <Button on:click={() => window.location.reload()}>Försök igen</Button>
       </div>
     {/if}
     
@@ -117,6 +118,7 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
+    --radius: 0.5rem;
   }
 
   :global([data-theme='light']) {
@@ -139,6 +141,7 @@
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 224.3 76.3% 48%;
+    --radius: 0.5rem;
   }
 
   :global(body) {
@@ -244,20 +247,6 @@
 
   .error-overlay {
     color: #ef4444;
-  }
-
-  .error-overlay button {
-    padding: 0.5rem 1rem;
-    background: #3b82f6;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .error-overlay button:hover {
-    background: #2563eb;
   }
 
   .sidebar {
